@@ -9,7 +9,7 @@ BCsFileName=sys.argv[2]		# Excel file with thermal boundary conditions
 #MeshFileName='mesh.dat'
 #BCsFileName='Table.xlsx'
 #--Settings--------------------------------
-print('*Start')
+print('*Excel-file reading')
 Hex=[[0,1,2,3],[0,1,5,4],[1,2,6,5],[2,3,7,6],[0,4,7,3],[4,5,6,7]]
 Tet=[[0,1,2],[0,1,3],[1,2,3],[0,3,2]]
 #path to Excel reading module
@@ -27,14 +27,15 @@ for i in range(4,ws.max_row+1): TableRows[str(ws.cell(i,15).value)]=i
 #------------DAT-file reading------------------------------
 print('*Mesh reading')
 ElemNodesNum=[0,0,0,0,0,0,0,0]
-PointsArray=vtk.vtkPoints()
-PointsArray.InsertNextPoint(0.0,0.0,0.0)
+PointsArray={}
+#=vtk.vtkPoints()
+#PointsArray.InsertNextPoint(0.0,0.0,0.0)
 Faces={}	#Keys:[Min][Max][Third]
 CMBLOCK={}
 BlocksList=[]
 BlocksList.append('')
 BlocksInfo={}
-BlocksInfo['']=[0,0,vtk.vtkUnstructuredGrid(),''] 	# Index in the List, Number of Cells, vtkUnstructuredGrid
+BlocksInfo['']=[0,0,vtk.vtkUnstructuredGrid(),{},0,vtk.vtkPoints()] 	# Index in the List, Number of Cells, vtkUnstructuredGrid, Points, Number of Points, vtk.vtkPoints()
 mf=open(Dir+MeshFileName,'r')
 txt=mf.readline()
 while txt[0:5]!='/solu':
@@ -44,7 +45,7 @@ while txt[0:5]!='/solu':
 		for TableKey in TableRows:
 			if (TableKey in cmnt)and(not TableKey in BlocksInfo):
 				NamedSelection=TableKey
-				BlocksInfo[NamedSelection]=[len(BlocksList),0,vtk.vtkUnstructuredGrid()]
+				BlocksInfo[NamedSelection]=[len(BlocksList),0,vtk.vtkUnstructuredGrid(),{},0,vtk.vtkPoints()]
 				BlocksList.append(NamedSelection)
 				print(NamedSelection+' has been found')
 	elif txt[0:3]=='et,': ElemType=int(txt.split(',')[2])
@@ -55,7 +56,7 @@ while txt[0:5]!='/solu':
 		CoordLen=int(Values[1].split('.')[0].split('e')[1])
 		txt=mf.readline()
 		while txt[0:2]!='-1':
-			PointsArray.InsertNextPoint(float(txt[NumLen:NumLen+CoordLen]),float(txt[NumLen+CoordLen:NumLen+2*CoordLen]),float(txt[NumLen+2*CoordLen:NumLen+3*CoordLen]))
+			PointsArray[int(txt[0:NumLen])]=(float(txt[NumLen:NumLen+CoordLen]),float(txt[NumLen+CoordLen:NumLen+2*CoordLen]),float(txt[NumLen+2*CoordLen:NumLen+3*CoordLen]))
 			txt=mf.readline()
 	elif txt[0:7]=='eblock,':
 		NumLen=int(mf.readline()[1:-2].split('i')[1])
@@ -186,7 +187,7 @@ while txt[0:5]!='/solu':
 		NodesNum=int(Values[3])
 		if NamedSelection in TableRows:
 			CMBLOCK[NamedSelection]=[]
-			BlocksInfo[NamedSelection]=[len(BlocksList),0,vtk.vtkUnstructuredGrid()]
+			BlocksInfo[NamedSelection]=[len(BlocksList),0,vtk.vtkUnstructuredGrid(),{},0,vtk.vtkPoints()]
 			BlocksList.append(NamedSelection)
 			print(NamedSelection+' has been found')
 			NumLen=int(mf.readline()[1:-2].split('i')[1])
@@ -202,8 +203,8 @@ while txt[0:5]!='/solu':
 	txt=mf.readline()			
 mf.close()
 #----------------------------------------------------------
-#------------DATA treatment--------------------------------
-print('**Data treatment')
+#------------DATA processing-------------------------------
+print('**Data processing')
 #-- Node blocks and cells counter
 for MinNum in Faces:
 	for MaxNum1 in Faces[MinNum]:
@@ -211,38 +212,92 @@ for MinNum in Faces:
 			for NamedSelection in CMBLOCK:
 				if (MinNum in CMBLOCK[NamedSelection])and(MaxNum1 in CMBLOCK[NamedSelection])and(MidNum1 in CMBLOCK[NamedSelection]):
 					Faces[MinNum][MaxNum1][MidNum1]=BlocksInfo[NamedSelection][0]
-			BlocksInfo[BlocksList[Faces[MinNum][MaxNum1][MidNum1]]][1]+=1
+			NamedSelection=BlocksList[Faces[MinNum][MaxNum1][MidNum1]]
+			BlocksInfo[NamedSelection][1]+=1
+			if not MinNum in BlocksInfo[NamedSelection][3]:
+				BlocksInfo[NamedSelection][3][MinNum]=BlocksInfo[NamedSelection][4]
+				BlocksInfo[NamedSelection][4]+=1
+				BlocksInfo[NamedSelection][5].InsertNextPoint(PointsArray[MinNum][0],PointsArray[MinNum][1],PointsArray[MinNum][2])
+			if not MidNum1 in BlocksInfo[NamedSelection][3]:
+				BlocksInfo[NamedSelection][3][MidNum1]=BlocksInfo[NamedSelection][4]
+				BlocksInfo[NamedSelection][4]+=1
+				BlocksInfo[NamedSelection][5].InsertNextPoint(PointsArray[MidNum1][0],PointsArray[MidNum1][1],PointsArray[MidNum1][2])
+			if not MaxNum1 in BlocksInfo[NamedSelection][3]:
+				BlocksInfo[NamedSelection][3][MaxNum1]=BlocksInfo[NamedSelection][4]
+				BlocksInfo[NamedSelection][4]+=1
+				BlocksInfo[NamedSelection][5].InsertNextPoint(PointsArray[MaxNum1][0],PointsArray[MaxNum1][1],PointsArray[MaxNum1][2])
 #-- Blocks preaparation
 for NamedSelection in BlocksList:
-	BlocksInfo[NamedSelection][2].SetPoints(PointsArray)
-	BlocksInfo[NamedSelection][2].Allocate(BlocksInfo[NamedSelection][1])
+	if BlocksInfo[NamedSelection][1]==0:
+		print('*WARNING: '+NamedSelection+' is overlapping and removed')
+		BlocksInfo.__delitem__(NamedSelection)
+	else:
+		BlocksInfo[NamedSelection][2].SetPoints(BlocksInfo[NamedSelection][5])
+		BlocksInfo[NamedSelection][2].Allocate(BlocksInfo[NamedSelection][1])
 for MinNum in Faces:
 	for MaxNum1 in Faces[MinNum]:
 		for MidNum1 in Faces[MinNum][MaxNum1]:
 			NamedSelection=BlocksList[Faces[MinNum][MaxNum1][MidNum1]]
-			BlocksInfo[NamedSelection][2].InsertNextCell(vtk.VTK_TRIANGLE,3,[MinNum,MidNum1,MaxNum1]) #triangle Other: VTK_QUAD (2D),VTK_TETRA (3D), VTK_HEXAHEDRON (3D)
+			i=BlocksInfo[NamedSelection][3][MinNum]
+			j=BlocksInfo[NamedSelection][3][MidNum1]
+			k=BlocksInfo[NamedSelection][3][MaxNum1]
+			BlocksInfo[NamedSelection][2].InsertNextCell(vtk.VTK_TRIANGLE,3,[i,j,k]) #triangle Other: VTK_QUAD (2D),VTK_TETRA (3D), VTK_HEXAHEDRON (3D)
 #----------------------------------------------------------
 #------------OUTPUT----------------------------------------
 output=vtk.vtkMultiBlockDataSet()
-output.SetNumberOfBlocks(len(BlocksList))
-for NamedSelection in BlocksList:
+BlocksNum=len(BlocksInfo)
+output.SetNumberOfBlocks(BlocksNum)
+i=0
+for NamedSelection in BlocksInfo:
 	if NamedSelection=='':AnnotationText=''
 	elif float(ws.cell(TableRows[NamedSelection],12).value)!=-1e-30:
-		AnnotationText='Temp:'+str(ws.cell(TableRows[NamedSelection],12).value)+' '+str(ws.cell(3,12).value)+'\n'+\
-			'Press:'+str(ws.cell(TableRows[NamedSelection],9).value)+' '+str(ws.cell(3,9).value)
+		Temp=float(ws.cell(TableRows[NamedSelection],12).value)
+		Press=float(ws.cell(TableRows[NamedSelection],9).value)
+		Array1=vtk.vtkFloatArray()
+		Array1.SetName('Temp')
+		Array3=vtk.vtkFloatArray()
+		Array3.SetName('Press')
+		for j in BlocksInfo[NamedSelection][3]:
+			Array1.InsertNextValue(Temp)
+			Array3.InsertNextValue(Press)
+		BlocksInfo[NamedSelection][2].GetPointData().SetScalars(Array1)
+		BlocksInfo[NamedSelection][2].GetPointData().AddArray(Array3)
 	elif float(ws.cell(TableRows[NamedSelection],13).value)!=-1e-30:
-		AnnotationText='Q:'+str(ws.cell(TableRows[NamedSelection],13).value)+' '+str(ws.cell(3,13).value)+'\n'+\
-			'Press:'+str(ws.cell(TableRows[NamedSelection],9).value)+' '+str(ws.cell(3,9).value)
+		HTC=float(ws.cell(TableRows[NamedSelection],13).value)
+		Press=float(ws.cell(TableRows[NamedSelection],9).value)
+		Array2=vtk.vtkFloatArray()
+		Array2.SetName('Heat Flux')
+		Array3=vtk.vtkFloatArray()
+		Array3.SetName('Press')
+		for j in BlocksInfo[NamedSelection][3]:
+			Array2.InsertNextValue(HTC)
+			Array3.InsertNextValue(Press)
+		BlocksInfo[NamedSelection][2].GetPointData().SetScalars(Array2)
+		BlocksInfo[NamedSelection][2].GetPointData().AddArray(Array3)
 	else:
-		AnnotationText='Temp:'+str(ws.cell(TableRows[NamedSelection],7).value)+' '+str(ws.cell(3,7).value)+'\n'+\
-			'HTC:'+str(ws.cell(TableRows[NamedSelection],8).value)+' '+str(ws.cell(3,8).value)+'\n'+\
-			'Press:'+str(ws.cell(TableRows[NamedSelection],9).value)+' '+str(ws.cell(3,9).value)	
-	output.GetMetaData(BlocksInfo[NamedSelection][0]).Set(vtk.vtkCompositeDataSet.NAME(), NamedSelection)
-	output.GetMetaData(BlocksInfo[NamedSelection][0]).Set(output.FIELD_NAME(), AnnotationText)
-	output.SetBlock(BlocksInfo[NamedSelection][0], BlocksInfo[NamedSelection][2])
+		Temp=float(ws.cell(TableRows[NamedSelection],7).value)
+		HTC=float(ws.cell(TableRows[NamedSelection],8).value)
+		Press=float(ws.cell(TableRows[NamedSelection],9).value)
+		Array1=vtk.vtkFloatArray()
+		Array1.SetName('Temp sink')
+		Array2=vtk.vtkFloatArray()
+		Array2.SetName('HTC')
+		Array3=vtk.vtkFloatArray()
+		Array3.SetName('Press')
+		for j in BlocksInfo[NamedSelection][3]:
+			Array1.InsertNextValue(Temp)
+			Array2.InsertNextValue(HTC)
+			Array3.InsertNextValue(Press)
+		BlocksInfo[NamedSelection][2].GetPointData().SetScalars(Array1)
+		BlocksInfo[NamedSelection][2].GetPointData().AddArray(Array2)
+		BlocksInfo[NamedSelection][2].GetPointData().AddArray(Array3)
+	output.GetMetaData(i).Set(vtk.vtkCompositeDataSet.NAME(), NamedSelection)
+	output.SetBlock(i, BlocksInfo[NamedSelection][2])
+	i+=1
 wb.close()
 print('***Data output')
 MBDSwriter=vtk.vtkXMLMultiBlockDataWriter()
 MBDSwriter.SetFileName(Dir+MeshFileName[0:-3]+'vtm')
+MBDSwriter.SetDataModeToBinary()
 MBDSwriter.SetInputData(output)
 MBDSwriter.Write()
