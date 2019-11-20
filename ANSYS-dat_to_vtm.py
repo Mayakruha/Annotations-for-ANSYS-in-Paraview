@@ -22,7 +22,7 @@ from openpyxl import load_workbook
 wb=load_workbook(Dir+BCsFileName, read_only=True)
 ws=wb['BC Zones']
 TableRows={}
-for i in range(4,ws.max_row+1): TableRows[str(ws.cell(i,15).value)]=i
+for i in range(4,ws.max_row+1): TableRows[str(ws.cell(i,15).value).upper()]=i
 #----------------------------------------------------------
 #------------DAT-file reading------------------------------
 print('*Mesh reading')
@@ -40,7 +40,7 @@ mf=open(Dir+MeshFileName,'r')
 txt=mf.readline()
 while txt[0:5]!='/solu':
 	if txt[0:25]=='/com,*********** Create "':
-		cmnt=txt.split('"')[1]
+		cmnt=txt.split('"')[1].upper()
 		NamedSelection=''
 		for TableKey in TableRows:
 			if (TableKey in cmnt)and(not TableKey in BlocksInfo):
@@ -48,16 +48,22 @@ while txt[0:5]!='/solu':
 				BlocksInfo[NamedSelection]=[len(BlocksList),0,vtk.vtkUnstructuredGrid(),{},0,vtk.vtkPoints()]
 				BlocksList.append(NamedSelection)
 				print(NamedSelection+' has been found')
-	elif txt[0:3]=='et,': ElemType=int(txt.split(',')[2])
-	elif txt[0:9]=='nblock,3,':			#-----Nodes block
+	elif txt[0:3]=='et,':
+		ElemType=int(txt.split(',')[2])
+		if ElemType==186 or ElemType==187: print('***ERROR - There are elemets for structural calculations!!!!!!')
+	elif txt[0:7]=='nblock,':			#-----Nodes block
+		Num=int(txt.split(',')[3])
 		txt=mf.readline()
-		Values=txt.split(',')
+		Values=txt[1:-2].split(',')
 		NumLen=int(Values[0].split('i')[1])
+		RowNum=int(Values[0].split('i')[0])		
 		CoordLen=int(Values[1].split('.')[0].split('e')[1])
-		txt=mf.readline()
-		while txt[0:2]!='-1':
-			PointsArray[int(txt[0:NumLen])]=(float(txt[NumLen:NumLen+CoordLen]),float(txt[NumLen+CoordLen:NumLen+2*CoordLen]),float(txt[NumLen+2*CoordLen:NumLen+3*CoordLen]))
+		for i in range(0,Num):
 			txt=mf.readline()
+			TxtLen=len(txt)-1
+			if TxtLen>(RowNum*NumLen+2*CoordLen): PointsArray[int(txt[0:NumLen])]=(float(txt[NumLen:NumLen+CoordLen]),float(txt[NumLen+CoordLen:NumLen+2*CoordLen]),float(txt[NumLen+2*CoordLen:NumLen+3*CoordLen]))
+			elif TxtLen>(RowNum*NumLen+CoordLen): PointsArray[int(txt[0:NumLen])]=(float(txt[NumLen:NumLen+CoordLen]),float(txt[NumLen+CoordLen:NumLen+2*CoordLen]),0.0)
+			else: PointsArray[int(txt[0:NumLen])]=(float(txt[NumLen:NumLen+CoordLen]),0.0,0.0)
 	elif txt[0:7]=='eblock,':
 		NumLen=int(mf.readline()[1:-2].split('i')[1])
 		txt=mf.readline()
@@ -183,7 +189,7 @@ while txt[0:5]!='/solu':
 				txt=mf.readline()
 	elif txt[0:8]=='CMBLOCK,':
 		Values=txt.split(',')
-		NamedSelection=Values[1].replace(' ','')
+		NamedSelection=Values[1].replace(' ','').upper()
 		NodesNum=int(Values[3])
 		if NamedSelection in TableRows:
 			CMBLOCK[NamedSelection]=[]
@@ -295,9 +301,10 @@ for NamedSelection in BlocksInfo:
 	output.SetBlock(i, BlocksInfo[NamedSelection][2])
 	i+=1
 wb.close()
-print('***Data output')
-MBDSwriter=vtk.vtkXMLMultiBlockDataWriter()
-MBDSwriter.SetFileName(Dir+MeshFileName[0:-3]+'vtm')
-MBDSwriter.SetDataModeToBinary()
-MBDSwriter.SetInputData(output)
-MBDSwriter.Write()
+print('***'+str(BlocksNum)+' blocks output')
+if BlocksNum!=0:
+	MBDSwriter=vtk.vtkXMLMultiBlockDataWriter()
+	MBDSwriter.SetFileName(Dir+MeshFileName[0:-3]+'vtm')
+	MBDSwriter.SetDataModeToBinary()
+	MBDSwriter.SetInputData(output)
+	MBDSwriter.Write()
