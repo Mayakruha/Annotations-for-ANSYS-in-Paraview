@@ -1,9 +1,9 @@
 #----- Code in the Programmable source: --------
 #AnnotText=['Zone1','Temp: 100 C','HTC: 350 W/m2K','Press: 2.5 bar']
 #Rotation=[90,0,0]
-#Coordinates=[0.1,0.1,0.2]
+#Coordinates=[0.0,0.0,0.0]
 #LineLength=0.5
-#FontScale = 0.1
+#FontScale = 0.02
 #import DrawAnnot
 #DrawAnnot.DrawAnnot(output,AnnotText,Rotation,Coordinates,LineLength,FontScale)
 #---------------------------------------
@@ -73,10 +73,10 @@ def DrawAnnot(output,AnnotText,Rotation,Coordinates,LineLength,FontScale):
     outputFont.SetPoints(FontPoints)
     #-------Transformation
     Transformer=vtk.vtkTransform()
+    Transformer.Translate(Coordinates)
     Transformer.RotateX(Rotation[0])
     Transformer.RotateY(Rotation[1])
     Transformer.RotateZ(Rotation[2])
-    Transformer.Translate(Coordinates)
     TransformFilter = vtk.vtkTransformPolyDataFilter() 
     TransformFilter.SetInputData(outputFont)
     TransformFilter.SetTransform(Transformer)
