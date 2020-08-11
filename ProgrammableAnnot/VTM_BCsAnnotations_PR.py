@@ -1,11 +1,11 @@
-Dir='D:\\Annotations\\'
+Dir='C:\\Annotations\\'
 FileName='mesh.vtm'
 HorizAxis=0 #0-X, 1-Y, 2-Z
 VertAxis=2 #Second axis of the annotation plane: 0-X, 1-Y, 2-Z
 ViewDirect=True #True - Horizontal Axis is from left to right, False - Horizontal Axis is from right to left
 Projection=-0.001 #Shift from the plane
 FontScale = 0.002
-AnnDist=0.004*FontScale*15 #vertical distance between annotations. 15-Height of vtkTextSource
+AnnDist=8*FontScale*15 #vertical distance between annotations. 15-Height of vtkTextSource
 RowNum=3 #number of rows for the nearest annotations
 TxtColors=[[1.0, 0.0, 0.0],[1.0,1.0,0.0],[0.0, 1.0, 0.0],[0.0,1.0,1.0],[0.0,0.0,1.0]]
 #------------------------------------------
@@ -141,7 +141,7 @@ for j in range(0,BlocksNum):
 # create a new 'Text'
 	PrSource = ProgrammableSource()
 #----------------------------------
-	PrSource.Script = "AnnotText="+DataTable[Num]['Text']+"\n"+\
+	PrSource.Script="AnnotText="+DataTable[Num]['Text']+"\n"+\
 					"Rotation="+str(Rotation)+"\n"+\
 					"Coordinates="+str(DataTable[Num]['Coord'])+"\n"+\
 					"LineLength="+str(DataTable[Num]['ArrowLength'])+"\n"+\
